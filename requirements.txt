@@ -1,0 +1,13 @@
+fastapi==0.92.0
+pydantic==1.10.5
+uvicorn~=0.20.0
+
+pymongo~=4.3.3
+celery~=5.2.7
+motor~=3.1.1
+snscrape==0.5.0.20230113
+tweepy~=4.12.1
+redis==4.5.1
+
+pytest~=7.2.1
+httpx~=0.23.3

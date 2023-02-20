@@ -1,0 +1,4 @@
+/.pytest_cache/
+/.venv/
+/docs/
+/tests/.pytest_cache/
