@@ -29,9 +29,6 @@ class PyObjectId(ObjectId):
         field_schema.update(type="string")
 
 
-
-
-
 class SyncTask(BaseModel):
     """
     Class for task sync from twitter

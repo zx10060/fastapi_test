@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     MONGO_HOST: str
     MONGO_PORT: int
     MONGO_COLLECTION: str
-    
+
     REDIS_HOST: str
     REDIS_PORT: int
 

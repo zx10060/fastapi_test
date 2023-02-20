@@ -29,9 +29,11 @@ def with_limits(function):
     :param function:
     :return: function(*args, **kwargs)
     """
+
     @functools.wraps
     def wrapper(*args, **kwargs):
         function(*args, **kwargs)
+
     return wrapper
 
 

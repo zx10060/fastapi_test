@@ -101,7 +101,7 @@ async def get_status(session_id: str):
 
 @app.get(
     "/api/user/{username}",
-    response_model = Account
+    response_model=Account,
 )
 async def get_user_data(username: str):
     """
