@@ -2,7 +2,7 @@
 Puller from twitter
 """
 import logging
-from typing import Union, Any
+from typing import Union
 import functools
 import snscrape.modules.twitter as sntwitter
 from pymongo import InsertOne, UpdateOne, DeleteOne
@@ -11,6 +11,7 @@ from app.config import with_settings
 from app.database import cash_server, sync_client
 import tweepy
 from app.models import InternalError
+from time import sleep
 
 END_TIME = "2010-01-01"
 # time limit 900 sec
@@ -22,6 +23,8 @@ TWITTER_LIMITS = {
     "tasks": 150,
 }
 
+log = logging.getLogger(__name__)
+
 
 def with_limits(function):
     """
@@ -32,6 +35,29 @@ def with_limits(function):
 
     @functools.wraps
     def wrapper(*args, **kwargs):
+        """Decorator"""
+        method = ""
+        key = f"twitter:{method}"
+        method_call_count = 0
+        try:
+            method_call_count = int(
+                cash_server.ts().range(
+                    key=key,
+                    from_time="-",
+                    to_time="+",
+                    aggregation_type="sum",
+                    bucket_size_msec=TTL * 10000,
+                )[0][1]
+            )
+            print(method_call_count)
+        except BaseException:
+            pass
+
+        if method_call_count > int(TWITTER_LIMITS.get(method) * 0.75):
+            d_time = TTL / (TWITTER_LIMITS.get(method) - method_call_count)
+            print("sleep ", d_time)
+            sleep(d_time)
+        cash_server.ts().add(key=key, timestamp="*", value=1)
         function(*args, **kwargs)
 
     return wrapper
@@ -51,46 +77,28 @@ class TwitterPuller:
         self.api = tweepy.API(auth, wait_on_rate_limit=True)
         self.storage = sync_client.twitter
         self.storage_data = sync_client.twitter_data
-        # create time sirieses for count calls to twitter
-        # try:
-        #     for method, _ in twitter_limits.items():
-        #         cash_server.ts().create(
-        #             key = f"twitter:{method}",
-        #             retention_msecs = TTL * 1000,
-        #             duplicate_policy = 'SUM'
-        #         )
-        # except:
-        #     pass
 
-    # def _get(self, method: str):
-    #     """
-    #     Get from twitter.
-    #     :param method:
-    #     :return:
-    #     """
-    #     key = f"twitter:{method}"
-    #     method_call_count = 0
-    #     try:
-    #         method_call_count = int(
-    #             cash_server.ts().range(
-    #                 key = key,
-    #                 from_time = "-",
-    #                 to_time = "+",
-    #                 aggregation_type = 'sum',
-    #                 bucket_size_msec = TTL * 10000
-    #             )[0][1]
-    #             )
-    #         print(method_call_count)
-    #     except:
-    #         pass
-    #
-    #     if method_call_count > int(twitter_limits.get(method) * 0.75):
-    #         d_time = TTL / (twitter_limits.get(method) - method_call_count)
-    #         print("sleep ", d_time)
-    #         time.sleep(d_time)
-    #     cash_server.ts().add(key = key, timestamp = "*", value = 1)
-    #     # TODO async call to twitter
-    #     # await method(*args, **kwargs)
+        # create time sirieses for count calls to twitter
+        try:
+            for method, _ in TWITTER_LIMITS.items():
+                cash_server.ts().create(
+                    key=f"twitter:{method}",
+                    retention_msecs=TTL * 1000,
+                    duplicate_policy="SUM",
+                )
+        except BaseException:
+            log.error("Redis not avaleble!")
+
+            def new_get(_method: str):
+                """
+                New finction timelimits if redis not avaleble.
+                :param _method:
+                :return:
+                """
+                pass
+                # return _method(*args, **kwargs)
+
+            self.__dict__["_get"] = new_get
 
     def _get_user_by_name(self, username: str):
         """
@@ -112,9 +120,14 @@ class TwitterPuller:
 
     @with_limits
     def _get_users(self, usernames: list) -> list:
-        return self.api.lookup_users(screen_name=usernames)
+        users = []
+        try:
+            users = self.api.lookup_users(screen_name=usernames)
+        except BaseException:
+            log.error("Error of lookup users in twitter!")
+        return users
 
-    def get_users_data(self, usernames: list):
+    def get_users_data(self, usernames: list) -> None:
         """
         Get users data from twitter
         :param usernames: list
@@ -124,7 +137,8 @@ class TwitterPuller:
         if not users:
             raise InternalError
         query = {"username": {"$in": usernames}}
-        accounts = self.storage.accounts.find(query, {"username": 1, "twitts_count": 1})
+        params = {"username": 1, "twitts_count": 1}
+        accounts = self.storage.accounts.find(query, params)
         accounts_exist = {
             account["usename"]: account["twitts_count"] for account in accounts
         }
@@ -171,18 +185,22 @@ class TwitterPuller:
                 start_pull_from_twitter.delay(user.id)
 
     @with_limits
-    def _get_twitts_by_id(self, ids: list) -> Any:
+    def _get_twitts_by_id(self, ids: list) -> list:
         """
         Return up to 100 twitt objs by IDs.
         https://docs.tweepy.org/en/latest/api.html#tweepy.API.lookup_statuses
         :param ids: list
         :return:
         """
-        # TODO will be try
-        return self.api.lookup_statuses(ids)
+        statuses = []
+        try:
+            statuses = self.api.lookup_statuses(ids)
+        except BaseException:
+            log.error("Error lookup statuses")
+        return statuses
 
     @with_limits
-    def _get_twitts(self, user_id: int, since_id: int = None) -> Any:
+    def _get_twitts(self, user_id: int, since_id: int = None) -> list:
         """
         Return 20 twitts by user id.
         :param user_id:
@@ -190,29 +208,41 @@ class TwitterPuller:
         :return:
         """
         # TODO will be try
-        return self.api.user_timeline(user_id=user_id, since_id=since_id)
+        try:
+            result = self.api.user_timeline(user_id=user_id, since_id=since_id)
+            if result:
+                return result
+            else:
+                return []
+        except BaseException:
+            log.error("Get user timeline error!")
 
-    def _remove_twitts_repits(self, user_id: Union[str, int], twitts: list) -> None:
+    def _remove_twitts_repits(
+        self,
+        user_id: Union[str, int],
+        twitts: list,
+    ) -> None:
         """
         Remove dublicate twitts from DB.
         :rtype: object
         :param user_id:
         :param twitts:
         """
+
+        def _write(_data):
+            self.storage_data[f"{user_id}"].bulk_write(_data, ordered=False)
+
         seen = set()
         must_delete = []
         for twitt in twitts:
             if twitt in seen:
                 must_delete.append(DeleteOne({"_id": twitt.id}))
                 if len(must_delete) == 500:
-                    self.storage_data[f"{user_id}"].bulk_write(
-                        must_delete, ordered=False
-                    )
+                    _write(must_delete)
                     must_delete.clear()
             else:
                 seen.add(twitt)
-
-        self.storage_data[f"{user_id}"].bulk_write(must_delete, ordered=False)
+        _write(must_delete)
 
     def _get_twitts_by_user_id(self, user_id: Union[str, int]) -> set:
         """
@@ -241,7 +271,7 @@ class TwitterPuller:
         twitts_ids = self._get_twitts_by_user_id(user_id)
 
         if not twitts_ids:
-            logging.info("New data")
+            log.info("New data")
             data = [InsertOne(twitt._json) for twitt in result]
         else:
             data = [
@@ -284,5 +314,6 @@ class TwitterPuller:
                 new_twitts.append(InsertOne(twitt.json()))
                 twitts_id_set.add(twitt.id)
             if len(new_twitts) == butch_count:
-                self.storage_data[f"{account.twitter_id}"].bulk_write(new_twitts)
+                collection = f"{account.twitter_id}"
+                self.storage_data[collection].bulk_write(new_twitts)
                 new_twitts.clear()
