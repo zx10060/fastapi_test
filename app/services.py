@@ -17,7 +17,9 @@ from app.models import (
 log = logging.getLogger(__name__)
 
 
-async def get_status_by_session(session_id: str) -> Union[list[AccountStatus], None]:
+async def get_status_by_session(
+    session_id: str,
+) -> Union[list[AccountStatus], None]:
     """
     Return
     :param session_id: str of Session ID(Task ID)
@@ -32,8 +34,9 @@ async def get_status_by_session(session_id: str) -> Union[list[AccountStatus], N
     try:
         # find all account from task
         query = {"username": {"$in": task["users_list"]}}
-        return [account async for account in database.a_db.accounts.find(query)]
-    except:
+        accounts = database.a_db.accounts.find(query)
+        return [account async for account in accounts]
+    except BaseException:
         raise InternalError
 
 
@@ -49,11 +52,13 @@ async def get_user_data_by_username(username: str) -> Union[Account, None]:
         account = await database.a_db.accounts.find_one(query)
         if account:
             return account
-    except:
+    except BaseException:
         raise InternalError
 
 
-async def get_last_ten_twitts_by_twitter_id(twitter_id: str) -> list[Union[str, None]]:
+async def get_last_ten_twitts_by_twitter_id(
+    twitter_id: str,
+) -> list[Union[str, None]]:
     """
     Return 10 last twitts by twitter id
     :param twitter_id:
@@ -62,7 +67,7 @@ async def get_last_ten_twitts_by_twitter_id(twitter_id: str) -> list[Union[str, 
     try:
         cursor = database.a_db_data[twitter_id].find()
         return [twitt["text"] for twitt in await cursor.to_list(length=10)]
-    except:
+    except BaseException:
         raise InternalError
 
 
@@ -111,5 +116,5 @@ async def create_new_task(data: ProfilesList) -> Union[Session, None]:
         # return task id
         return Session(session_id=task.inserted_id)
 
-    except:
+    except BaseException:
         raise InternalError

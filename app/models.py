@@ -5,7 +5,6 @@ from typing import List
 
 from bson import ObjectId
 from pydantic import BaseModel, Field
-from pydantic.dataclasses import dataclass
 import pymongo
 
 
@@ -20,6 +19,11 @@ class PyObjectId(ObjectId):
 
     @classmethod
     def validate(cls, v):
+        """
+        Validate ObjID
+        :param v:
+        :return:
+        """
         if not ObjectId.is_valid(v):
             raise ValueError("Invalid objectid")
         return ObjectId(v)
@@ -27,9 +31,6 @@ class PyObjectId(ObjectId):
     @classmethod
     def __modify_schema__(cls, field_schema):
         field_schema.update(type="string")
-
-
-
 
 
 class SyncTask(BaseModel):
@@ -41,6 +42,11 @@ class SyncTask(BaseModel):
     users_list: set[str] = Field(...)
 
     class Config:
+        """
+        Config for model.
+        Decorator doesnt work...
+        """
+
         allow_population_by_field_name = False
         arbitrary_types_allowed = True
         json_encoders = {ObjectId: str}
@@ -70,6 +76,10 @@ class Account(BaseModel):
     status: str = Field(...)
 
     class Collection:
+        """
+        Create index for username field in collection Accounts
+        """
+
         name = "usernames"
         indexes = [
             [
@@ -79,6 +89,11 @@ class Account(BaseModel):
         ]
 
     class Config:
+        """
+        Config for model.
+        @decorator doesnt work...
+        """
+
         allow_population_by_field_name = False
         arbitrary_types_allowed = True
         json_encoders = {ObjectId: str}
