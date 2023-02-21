@@ -7,14 +7,21 @@ import uvicorn
 from fastapi import FastAPI, HTTPException, Body
 
 
-from app.models import AccountStatus, InternalError, Session, ProfilesList, Account
+from app.models import (
+    AccountStatus,
+    InternalError,
+    Session,
+    ProfilesList,
+    Account,
+)
 from app import services
 
 
 log = logging.getLogger(__name__)
 
 description = """
-Test API for scrapping twitter data by scrapper or (and) with using account app. 🚀
+Test API for scrapping twitter data by scrapper
+or (and) with using account app. 🚀
 
 ## Users
 
@@ -71,7 +78,10 @@ async def add_profiles(data: ProfilesList = Body(...)):
                 detail="Some error with add new task, please try leter.",
             )
     except InternalError:
-        raise HTTPException(status_code=500, detail="Internal error, try leter.")
+        raise HTTPException(
+            status_code=500,
+            detail="Internal error, try leter.",
+        )
 
 
 @app.get(
@@ -94,9 +104,15 @@ async def get_status(session_id: str):
         if status_list:
             return status_list
         else:
-            raise HTTPException(status_code=404, detail="Session_id key not valid")
+            raise HTTPException(
+                status_code=404,
+                detail="Session_id key not valid",
+            )
     except InternalError:
-        raise HTTPException(status_code=500, detail="Internal error, try leter.")
+        raise HTTPException(
+            status_code=500,
+            detail="Internal error, try leter.",
+        )
 
 
 @app.get(
@@ -114,9 +130,15 @@ async def get_user_data(username: str):
         if account:
             return account
         else:
-            raise HTTPException(status_code=404, detail="User name not found in DB.")
+            raise HTTPException(
+                status_code=404,
+                detail="User name not found in DB.",
+            )
     except InternalError:
-        raise HTTPException(status_code=500, detail="Internal error, try leter.")
+        raise HTTPException(
+            status_code=500,
+            detail="Internal error, try leter.",
+        )
 
 
 @app.get(
@@ -135,9 +157,15 @@ async def get_twitts(twitter_id: str):
         if twitts:
             return twitts
         else:
-            raise HTTPException(status_code=404, detail="Twitter id not found in DB.")
+            raise HTTPException(
+                status_code=404,
+                detail="Twitter id not found in DB.",
+            )
     except InternalError:
-        raise HTTPException(status_code=500, detail="Internal error, try leter.")
+        raise HTTPException(
+            status_code=500,
+            detail="Internal error, try leter.",
+        )
 
 
 if __name__ == "__main__":
