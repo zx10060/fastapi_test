@@ -2,9 +2,12 @@
 Service layer for app
 """
 import logging
-from typing import Union
-from app import database, celery_twitter
+import re
+from typing import Union, Optional
+
 from fastapi.encoders import jsonable_encoder
+
+from app import database, celery_twitter
 from app.models import (
     Account,
     AccountStatus,
@@ -15,6 +18,9 @@ from app.models import (
 )
 
 log = logging.getLogger(__name__)
+
+
+TWITTER_USERNAME_REGEX = re.compile(r"^(?!.*\.\.)(?!.*\.$)[^\W][\w.]{0,15}$")
 
 
 async def get_status_by_session(
@@ -58,7 +64,7 @@ async def get_user_data_by_username(username: str) -> Union[Account, None]:
 
 async def get_last_ten_twitts_by_twitter_id(
     twitter_id: str,
-) -> list[Union[str, None]]:
+) -> list[Optional[str]]:
     """
     Return 10 last twitts by twitter id
     :param twitter_id:
@@ -71,20 +77,19 @@ async def get_last_ten_twitts_by_twitter_id(
         raise InternalError
 
 
-def _get_username(value: str) -> str:
+def _get_username(value: str) -> Optional[str]:
     """
-    Return username from url or return str
+    Return username from url or return None
     :param value: url or username
     :return:
     """
     if isinstance(value, str):
-        _data = value.split("/")
-        if len(_data) == 1 and value:
-            return value
-        else:
-            while _data[-1] == "":
-                _data.pop()
-            return _data[-1]
+        match = re.match(r"(?:https?://)?(?:www\.)?twitter\.com/(\w+)/?", value)
+        if match:
+            username = match.group(1)
+            if TWITTER_USERNAME_REGEX.match(username):
+                return username
+    return None
 
 
 async def create_new_task(data: ProfilesList) -> Union[Session, None]:
@@ -98,19 +103,19 @@ async def create_new_task(data: ProfilesList) -> Union[Session, None]:
     """
     try:
         # parse str of urls and names to usernames
-        users_list = {_get_username(item) for item in data.profiles if item}
-        if not users_list:
+        users_set = {_get_username(item) for item in data.profiles if item}
+        if not users_set:
             return None
 
         # create new task entity
-        new_task = SyncTask(users_list=users_list)
+        new_task = SyncTask(users_list=users_set)
 
         # save new task to mongo
         task = await database.a_db.tasks.insert_one(jsonable_encoder(new_task))
         log.info("Create new task in mongo: %s.", task.inserted_id)
 
         # create new task in celery
-        celery_task_id = celery_twitter.create_task.delay(users_list)
+        celery_task_id = celery_twitter.create_task.delay(users_set)
         log.info("Create new task in celery: %s", celery_task_id)
 
         # return task id
