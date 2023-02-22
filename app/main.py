@@ -23,16 +23,24 @@ description = """
 Test API for scrapping twitter data by scrapper
 or (and) with using account app. 🚀
 
-## Users
+## You can:
 
-You can **read items**.
+### Users
 
-## Users
+**add task** for sync list twitter users names
 
-You will be able to:
+**get task status** with all users in list
 
-* **Create users** (_not implemented_).
-* **Read users** (_not implemented_).
+### User
+
+**get user data** info about user by username like in twitter
+
+### Twitts
+
+**get twitts** by user twitter id (will return 10 last twitts)
+
+---
+
 """
 
 app = FastAPI(
@@ -59,7 +67,9 @@ app = FastAPI(
 async def add_profiles(data: ProfilesList = Body(...)):
     """
     Add list of links to users in twitter
+    
     Examples:
+    ```
     {
         "profiles": [
             "https://twitter.com/username",
@@ -67,6 +77,7 @@ async def add_profiles(data: ProfilesList = Body(...)):
             "https://twitter.com/username/",
         ]
     }
+    ```
     """
     try:
         result = await services.create_new_task(data)
