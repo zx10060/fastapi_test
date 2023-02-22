@@ -1,11 +1,13 @@
 """
 Service layer for app
 """
+import functools
 import logging
 import re
-from typing import Union, Optional
+from typing import Union, Optional, Any, Callable
 
 from fastapi.encoders import jsonable_encoder
+from pymongo.errors import PyMongoError
 
 from app import database, celery_twitter
 from app.models import (
@@ -23,6 +25,27 @@ log = logging.getLogger(__name__)
 TWITTER_USERNAME_REGEX = re.compile(r"^(?!.*\.\.)(?!.*\.$)[^\W][\w.]{0,15}$")
 
 
+def standart_exceptions(func: Callable[..., Any]) -> Callable[..., Any]:
+    """
+    Decorator for regular exceptions
+    """
+
+    @functools.wraps(func)
+    async def wrapper(*args: Any, **kwargs: Any) -> Any:
+        try:
+            return await func(*args, **kwargs)
+
+        except PyMongoError:
+            log.error("Data base not available.")
+            raise InternalError
+
+        except BaseException:
+            raise InternalError
+
+    return wrapper
+
+
+@standart_exceptions
 async def get_status_by_session(
     session_id: str,
 ) -> Union[list[AccountStatus], None]:
@@ -37,15 +60,13 @@ async def get_status_by_session(
     task = await database.a_db.tasks.find_one(query)
     if not task:
         return []
-    try:
-        # find all account from task
-        query = {"username": {"$in": task["users_list"]}}
-        accounts = database.a_db.accounts.find(query)
-        return [account async for account in accounts]
-    except BaseException:
-        raise InternalError
+    # find all account from task
+    query = {"username": {"$in": task["users_list"]}}
+    accounts = database.a_db.accounts.find(query)
+    return [account async for account in accounts]
 
 
+@standart_exceptions
 async def get_user_data_by_username(username: str) -> Union[Account, None]:
     """
     Load user data from DB
@@ -54,14 +75,12 @@ async def get_user_data_by_username(username: str) -> Union[Account, None]:
     :return:
     """
     query = {"username": {"$eq": username}}
-    try:
-        account = await database.a_db.accounts.find_one(query)
-        if account:
-            return account
-    except BaseException:
-        raise InternalError
+    account = await database.a_db.accounts.find_one(query)
+    if account:
+        return account
 
 
+@standart_exceptions
 async def get_last_ten_twitts_by_twitter_id(
     twitter_id: str,
 ) -> list[Optional[str]]:
@@ -70,11 +89,8 @@ async def get_last_ten_twitts_by_twitter_id(
     :param twitter_id:
     :return:
     """
-    try:
-        cursor = database.a_db_data[twitter_id].find()
-        return [twitt["text"] for twitt in await cursor.to_list(length=10)]
-    except BaseException:
-        raise InternalError
+    cursor = database.a_db_data[twitter_id].find()
+    return [twitt["text"] for twitt in await cursor.to_list(length=10)]
 
 
 def _get_username(value: str) -> Optional[str]:
@@ -92,6 +108,7 @@ def _get_username(value: str) -> Optional[str]:
     return None
 
 
+@standart_exceptions
 async def create_new_task(data: ProfilesList) -> Union[Session, None]:
     """
     Create new task and return dict like:
@@ -101,25 +118,21 @@ async def create_new_task(data: ProfilesList) -> Union[Session, None]:
     :param data:
     :return:
     """
-    try:
-        # parse str of urls and names to usernames
-        users_set = {_get_username(item) for item in data.profiles if item}
-        if not users_set:
-            return None
+    # parse str of urls and names to usernames
+    users_set = {_get_username(item) for item in data.profiles if item}
+    if not users_set:
+        return None
 
-        # create new task entity
-        new_task = SyncTask(users_list=users_set)
+    # create new task entity
+    new_task = SyncTask(users_list=users_set)
 
-        # save new task to mongo
-        task = await database.a_db.tasks.insert_one(jsonable_encoder(new_task))
-        log.info("Create new task in mongo: %s.", task.inserted_id)
+    # save new task to mongo
+    task = await database.a_db.tasks.insert_one(jsonable_encoder(new_task))
+    log.info("Create new task in mongo: %s.", task.inserted_id)
 
-        # create new task in celery
-        celery_task_id = celery_twitter.create_task.delay(users_set)
-        log.info("Create new task in celery: %s", celery_task_id)
+    # create new task in celery
+    celery_task_id = celery_twitter.create_task.delay(users_set)
+    log.info("Create new task in celery: %s", celery_task_id)
 
-        # return task id
-        return Session(session_id=task.inserted_id)
-
-    except BaseException:
-        raise InternalError
+    # return task id
+    return Session(session_id=task.inserted_id)
