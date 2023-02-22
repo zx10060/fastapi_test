@@ -16,7 +16,6 @@ class Settings(BaseSettings):
 
     MONGO_HOST: str
     MONGO_PORT: int
-    MONGO_COLLECTION: str
 
     REDIS_HOST: str
     REDIS_PORT: int
@@ -25,8 +24,7 @@ class Settings(BaseSettings):
         """
         Config file path
         """
-
-        env_file = "../.env"
+        env_file = ".env"
         env_file_encoding = "utf-8"
 
 

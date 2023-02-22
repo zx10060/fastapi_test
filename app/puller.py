@@ -33,7 +33,7 @@ def with_limits(function):
     :return: function(*args, **kwargs)
     """
 
-    @functools.wraps
+    @functools.wraps(function)
     def wrapper(*args, **kwargs):
         """Decorator"""
         method = ""
