@@ -24,7 +24,7 @@ TEST_ACCOUNT = {
     "description": "test",
     "status": "test",
 }
-FAKE_TASK = ["http://twetter.com/test"]
+FAKE_TASK = ["http://twitter.com/test"]
 TEST_TWITT = {"text": "its test twitt"}
 
 db = sync_client[TEST_DATABASE]

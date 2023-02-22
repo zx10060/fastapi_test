@@ -1,4 +1,6 @@
 import functools
+from typing import Optional
+
 from pydantic import BaseSettings
 from functools import lru_cache
 
@@ -8,22 +10,23 @@ class Settings(BaseSettings):
     Class for Settings of project
     """
 
-    API_KEY: str
-    API_SECRET_KEY: str
-    API_BEARER_TOKEN: str
-    API_ACCESS_TOKEN: str
-    API_ACCESS_TOKEN_SECRET: str
+    API_KEY: Optional[str]
+    API_SECRET_KEY: Optional[str]
+    API_BEARER_TOKEN: Optional[str]
+    API_ACCESS_TOKEN: Optional[str]
+    API_ACCESS_TOKEN_SECRET: Optional[str]
 
-    MONGO_HOST: str
-    MONGO_PORT: int
+    MONGO_HOST: Optional[str]
+    MONGO_PORT: Optional[int]
 
-    REDIS_HOST: str
-    REDIS_PORT: int
+    REDIS_HOST: Optional[str]
+    REDIS_PORT: Optional[int]
 
     class Config:
         """
         Config file path
         """
+
         env_file = ".env"
         env_file_encoding = "utf-8"
 
