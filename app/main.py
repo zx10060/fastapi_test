@@ -67,7 +67,7 @@ app = FastAPI(
 async def add_profiles(data: ProfilesList = Body(...)):
     """
     Add list of links to users in twitter
-    
+
     Examples:
     ```
     {

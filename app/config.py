@@ -1,3 +1,6 @@
+"""
+Settings of project from .env
+"""
 import functools
 from typing import Optional
 
@@ -10,17 +13,20 @@ class Settings(BaseSettings):
     Class for Settings of project
     """
 
-    API_KEY: Optional[str]
-    API_SECRET_KEY: Optional[str]
-    API_BEARER_TOKEN: Optional[str]
-    API_ACCESS_TOKEN: Optional[str]
-    API_ACCESS_TOKEN_SECRET: Optional[str]
+    API_KEY: Optional[str] = None
+    API_SECRET_KEY: Optional[str] = None
+    API_BEARER_TOKEN: Optional[str] = None
+    API_ACCESS_TOKEN: Optional[str] = None
+    API_ACCESS_TOKEN_SECRET: Optional[str] = None
 
-    MONGO_HOST: Optional[str]
-    MONGO_PORT: Optional[int]
+    MONGO_HOST: Optional[str] = None
+    MONGO_PORT: Optional[int] = None
 
-    REDIS_HOST: Optional[str]
-    REDIS_PORT: Optional[int]
+    REDIS_HOST: Optional[str] = None
+    REDIS_PORT: Optional[int] = None
+
+    CELERY_BROKER_HOST: Optional[str] = "localhost"
+    CELERY_BROKER_PORT: Optional[str] = "6379"
 
     class Config:
         """

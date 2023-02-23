@@ -2,28 +2,31 @@
 Celery tasks for pull data from twitter
 """
 import logging
-import os
 from typing import Union
 
 from celery import Celery
+# from celery.schedules import crontab
+
 from app.puller import TwitterPuller
+from app.config import get_settings
 
 log = logging.getLogger(__name__)
+
+_config = get_settings()
+_celery_broker_url = (
+    f"redis://{_config.CELERY_BROKER_HOST}:{_config.CELERY_BROKER_PORT}"
+)
+
 celery = Celery(__name__)
-celery.conf.broker_url = os.environ.get(
-    "CELERY_BROKER_URL",
-    "redis://localhost:6379",
-)
-celery.conf.result_backend = os.environ.get(
-    "CELERY_RESULT_BACKEND",
-    "redis://localhost:6379",
-)
+celery.conf.broker_url = _celery_broker_url
+celery.conf.result_backend = _celery_broker_url
 
 
 @celery.task(name="create_task")
 def create_task(self, users_list: Union[set, list]):
     """
     Start sync users from list
+    :param self: For repiat celery task
     :param users_list:
     :return:
     """
@@ -38,6 +41,7 @@ def create_task(self, users_list: Union[set, list]):
 def start_pull_from_twitter(self, user_id):
     """
     Pull top twitts by user_id and save to DB
+    :param self: For repiat celery task
     :param user_id:
     """
     try:
@@ -70,6 +74,7 @@ def add_scrapper_task(username):
 def update_user_data(self):
     """
     Update every 15 minutes user data.
+    :param self: For repiat celery task
     :return:
     """
     try:
@@ -77,3 +82,12 @@ def update_user_data(self):
     except BaseException:
         log.error("Error in task `add_scrapper_task` with params: %s", "")
     update_user_data.retry()
+
+
+# TODO add schedule for update user data from twitter
+# celery.conf.beat_schedule = {
+#     "trigger-email-notifications": {
+#         "task": "app.update_user_data",
+#         "schedule": crontab(minute="0", hour="0", day="*")
+#     }
+# }
