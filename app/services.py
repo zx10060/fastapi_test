@@ -23,6 +23,7 @@ log = logging.getLogger(__name__)
 
 
 TWITTER_USERNAME_REGEX = re.compile(r"^(?!.*\.\.)(?!.*\.$)[^\W][\w.]{0,15}$")
+TWITTER_STR_REGEX = re.compile(r"(?:https?://)?(?:www\.)?twitter\.com/(\w+)/?")
 
 
 def standart_exceptions(func: Callable[..., Any]) -> Callable[..., Any]:
@@ -100,7 +101,7 @@ def _get_username(value: str) -> Optional[str]:
     :return:
     """
     if isinstance(value, str):
-        match = re.match(r"(?:https?://)?(?:www\.)?twitter\.com/(\w+)/?", value)
+        match = re.match(TWITTER_STR_REGEX, value)
         if match:
             username = match.group(1)
             if TWITTER_USERNAME_REGEX.match(username):

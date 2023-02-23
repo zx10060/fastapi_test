@@ -1,15 +1,8 @@
 version: '3.1'
 
+# TODO add mount log dir from all containers
+
 services:
-  api:
-    build:
-      context: .
-    container_name: application
-    expose:
-      - 8000
-    depends_on:
-      - mongodb
-      - redis
 
   redis:
     container_name: redis
@@ -21,13 +14,31 @@ services:
     container_name: mongo
     image: mongo:6
     restart: always
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: root
-      MONGO_INITDB_ROOT_PASSWORD: example
     volumes:
       - ./data:/data/db
     expose:
       - 27017
+
+  api:
+    build:
+      context: .
+    image: app_image:latest
+    container_name: application
+    expose:
+      - 8000
+    depends_on:
+      - mongodb
+      - redis
+
+  celery:
+    image: app_image:latest
+    container_name: celery
+    entrypoint: celery
+    command: -A app.celery_twitter worker -B -Q --log-level=WARNING
+    depends_on:
+      - api
+      - mongodb
+      - redis
 
   nginx:
     container_name: nginx
