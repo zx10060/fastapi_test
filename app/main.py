@@ -143,7 +143,7 @@ async def get_user_data(username: str):
         else:
             raise HTTPException(
                 status_code=404,
-                detail="User name not found in DB.",
+                detail="User name not found in DB. You can create new task with this username.",
             )
     except InternalError:
         raise HTTPException(
