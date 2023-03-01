@@ -8,9 +8,9 @@ import snscrape.modules.twitter as sntwitter
 from pymongo import InsertOne, UpdateOne, DeleteOne
 from datetime import datetime
 from app.config import with_settings
+from app.connections import get_api
 from app.database import cash_server, sync_client
-import tweepy
-from app.models import InternalError
+from app.models import InternalError, Account, TaskFaled
 from time import sleep
 
 END_TIME = "2010-01-01"
@@ -58,7 +58,7 @@ def with_limits(function):
             print("sleep ", d_time)
             sleep(d_time)
         cash_server.ts().add(key=key, timestamp="*", value=1)
-        function(*args, **kwargs)
+        return function(*args, **kwargs)
 
     return wrapper
 
@@ -69,36 +69,10 @@ class TwitterPuller:
     """
 
     @with_settings
-    def __init__(self, settings=None):
-        auth = tweepy.OAuthHandler(settings.API_KEY, settings.API_SECRET_KEY)
-        auth.set_access_token(
-            settings.API_ACCESS_TOKEN, settings.API_ACCESS_TOKEN_SECRET
-        )
-        self.api = tweepy.API(auth, wait_on_rate_limit=True)
+    def __init__(self):
+        self.api = get_api()
         self.storage = sync_client.twitter
         self.storage_data = sync_client.twitter_data
-
-        # create time sirieses for count calls to twitter
-        try:
-            for method, _ in TWITTER_LIMITS.items():
-                cash_server.ts().create(
-                    key=f"twitter:{method}",
-                    retention_msecs=TTL * 1000,
-                    duplicate_policy="SUM",
-                )
-        except BaseException:
-            log.error("Redis not avaleble!")
-
-            def new_get(_method: str):
-                """
-                New finction timelimits if redis not avaleble.
-                :param _method:
-                :return:
-                """
-                pass
-                # return _method(*args, **kwargs)
-
-            self.__dict__["_get"] = new_get
 
     def _get_user_by_name(self, username: str):
         """
@@ -119,13 +93,162 @@ class TwitterPuller:
         return self.storage.accounts.find(query)
 
     @with_limits
-    def _get_users(self, usernames: list) -> list:
+    def _get_users(self, usernames: list) -> list[Account, None]:
         users = []
         try:
-            users = self.api.lookup_users(screen_name=usernames)
+            _users = self.api.lookup_users(screen_name=usernames)
+            """
+            [
+                {
+                 'contributors_enabled': False,
+                 'created_at': 'Tue Jun 02 20:12:29 +0000 2009',
+                 'default_profile': False,
+                 'default_profile_image': False,
+                 'description': '',
+                 'entities': {'description': {'urls': []}},
+                 'favourites_count': 16798,
+                 'follow_request_sent': False,
+                 'followers_count': 124887908,
+                 'following': False,
+                 'friends_count': 165,
+                 'geo_enabled': False,
+                 'has_extended_profile': True,
+                 'id': 44196397,
+                 'id_str': '44196397',
+                 'is_translation_enabled': False,
+                 'is_translator': False,
+                 'lang': None,
+                 'listed_count': 106952,
+                 'location': '',
+                 'name': 'Elon Musk',
+                 'notifications': False,
+                 'profile_background_color': 'C0DEED',
+                 'profile_background_image_url': 'http://abs.twimg.com/images/themes/theme1/bg.png',
+                 'profile_background_image_url_https': 'https://abs.twimg.com/images/themes/theme1/bg.png',
+                 'profile_background_tile': False,
+                 'profile_banner_url': 'https://pbs.twimg.com/profile_banners/44196397/1576183471',
+                 'profile_image_url': 'http://pbs.twimg.com/profile_images/1590968738358079488/IY9Gx6Ok_normal.jpg',
+                 'profile_image_url_https': 'https://pbs.twimg.com/profile_images/1590968738358079488/IY9Gx6Ok_normal.jpg',
+                 'profile_link_color': '0084B4',
+                 'profile_location': None,
+                 'profile_sidebar_border_color': 'C0DEED',
+                 'profile_sidebar_fill_color': 'DDEEF6',
+                 'profile_text_color': '333333',
+                 'profile_use_background_image': True,
+                 'protected': False,
+                 'screen_name': 'elonmusk',
+                 'status': {'contributors': None,
+                            'coordinates': None,
+                            'created_at': 'Sun Jan 08 01:05:44 +0000 2023',
+                            'entities': {'hashtags': [],
+                                         'symbols': [],
+                                         'urls': [],
+                                         'user_mentions': [{'id': 14710129,
+                                                            'id_str': '14710129',
+                                                            'indices': [0, 15],
+                                                            'name': 'Peter H. Diamandis, MD',
+                                                            'screen_name': 'PeterDiamandis'}]},
+                            'favorite_count': 2907,
+                            'favorited': False,
+                            'geo': None,
+                            'id': 1611891871512514560,
+                            'id_str': '1611891871512514560',
+                            'in_reply_to_screen_name': 'PeterDiamandis',
+                            'in_reply_to_status_id': 1611867056768532481,
+                            'in_reply_to_status_id_str': '1611867056768532481',
+                            'in_reply_to_user_id': 14710129,
+                            'in_reply_to_user_id_str': '14710129',
+                            'is_quote_status': False,
+                            'lang': 'en',
+                            'place': None,
+                            'retweet_count': 185,
+                            'retweeted': False,
+                            'source': '<a href="http://twitter.com/download/iphone" '
+                                      'rel="nofollow">Twitter for iPhone</a>',
+                            'text': '@PeterDiamandis Risky Business (great movie)',
+                            'truncated': False},
+                 'statuses_count': 21995,
+                 'time_zone': None,
+                 'translator_type': 'none',
+                 'url': None,
+                 'utc_offset': None,
+                 'verified': True,
+                 'withheld_in_countries': []
+                },
+            ]
+            """
+            for _user in _users:
+                users.append(
+                    Account.construct(
+                        twitter_id=_user.id,
+                        name=_user.name,
+                        username=_user.screen_name,
+                        following_count=_user.favourites_count,
+                        followers_count=_user.followers_count,
+                        description=_user.description,
+                        twitts_count=_user.statuses_count,
+                        status="new",
+                    )
+                )
         except BaseException:
             log.error("Error of lookup users in twitter!")
         return users
+
+    def _scrapp_users(self, usernames: list) -> list[Account, None]:
+        """
+        Scrapp users from twitter.
+        :param usernames:
+        :return:
+        """
+        new_users_data = []
+        try:
+            from snscrape.modules.twitter import TwitterUserScraper
+
+            for user_name in usernames:
+                # TODO add proxy to env or other file or endpoint
+                # _data = TwitterUserScraper(user=user_name, proxies={}).get_items()
+                _data = TwitterUserScraper(user=user_name).get_items()
+                _user = _data.gi_frame.f_locals["self"].entity
+                """
+                User(
+                    username = 'elonmusk',
+                    id = 44196397,
+                    displayname = 'Elon Musk',
+                    rawDescription = '',
+                    renderedDescription = '',
+                    descriptionLinks = [],
+                    verified = True,
+                    created = datetime.datetime(2009, 6, 2, 20, 12, 29, tzinfo = datetime.timezone.utc),
+                    followersCount = 129994028,
+                    friendsCount = 181,
+                    statusesCount = 23224,
+                    favouritesCount = 18901,
+                    listedCount = 115282,
+                    mediaCount = 1424,
+                    location = '',
+                    protected = False,
+                    link = None,
+                    profileImageUrl = 'https://pbs.twimg.com/profile_images/1590968738358079488/IY9Gx6Ok_normal.jpg',
+                    profileBannerUrl = 'https://pbs.twimg.com/profile_banners/44196397/1576183471',
+                    label = None
+                    )
+                """
+                new_users_data.append(
+                    Account.construct(
+                        twitter_id=_user.id,
+                        name=_user.displayname,
+                        username=_user.username,
+                        following_count=_user.favouritesCount,
+                        followers_count=_user.followersCount,
+                        description=_user.rawDescription,
+                        twitts_count=_user.statusesCount,
+                        status="new",
+                    )
+                )
+        except BaseException:
+            log.error("Bad response from twitter, scrapper not working..")
+
+        return new_users_data
 
     def get_users_data(self, usernames: list) -> None:
         """
@@ -133,9 +256,14 @@ class TwitterPuller:
         :param usernames: list
         :return:
         """
-        users = self._get_users(usernames)
+        if self.api:
+            users = self._get_users(usernames)
+        else:
+            users = self._scrapp_users(usernames)
+
         if not users:
             raise InternalError
+
         query = {"username": {"$in": usernames}}
         params = {"username": 1, "twitts_count": 1}
         accounts = self.storage.accounts.find(query, params)
@@ -143,36 +271,16 @@ class TwitterPuller:
             account["usename"]: account["twitts_count"] for account in accounts
         }
 
-        def _filer_fields(_user):
-            """
-            filer_fields
-            :param _user:
-            :return:
-            """
-            return {
-                "twitter_id": _user.id,
-                "name": _user.name,
-                "username": _user.screen_name,
-                "following_count": _user.followers_count,
-                "followers_count": _user.description,
-                "description": _user.description,
-                "twitts_count": _user.statuses_count,
-                "status": "started",
-            }
-
-        def _update_fields(_user):
-            return {"$set": _filer_fields(_user)}
-
         users_for_pull_data = []
         query = []
         for user in users:
-            if accounts_exist.get(user.screen_name):
-                _filter = {"username": user.screen_name}
-                query.append(UpdateOne(_filter, _update_fields(user)))
-                if user.statuses_count != accounts_exist.get(user.screen_name):
+            if accounts_exist.get(user.username):
+                _filter = {"username": user.username}
+                query.append(UpdateOne(_filter, {"$set": user.dict()}))
+                if user.twitts_count != accounts_exist.get(user.username):
                     users_for_pull_data.append(user.id)
             else:
-                InsertOne(_filer_fields(user))
+                InsertOne(user.dict())
                 users_for_pull_data.append(user.id)
 
         if query:
@@ -207,7 +315,6 @@ class TwitterPuller:
         :param since_id:
         :return:
         """
-        # TODO will be try
         try:
             result = self.api.user_timeline(user_id=user_id, since_id=since_id)
             if result:
@@ -297,23 +404,30 @@ class TwitterPuller:
         :param end_time:
         :return:
         """
-        if not start_time:
-            start_time = datetime.today().strftime("%Y-%m-%d")
-        account = self._get_user_by_name(username)
-        twitts_id_set = self._get_twitts_by_user_id(account.twitter_id)
+        try:
+            if not start_time:
+                start_time = datetime.today().strftime("%Y-%m-%d")
+            account = self._get_user_by_name(username)
+            twitts_id_set = self._get_twitts_by_user_id(account.twitter_id)
 
-        if account.twitts_count == len(twitts_id_set):
-            # If all twitts updated exit from task
-            return True
+            if account.twitts_count == len(twitts_id_set):
+                # If all twitts updated exit from task
+                if account.status != "updated":
+                    account.status = "updated"
+                    _filter = {"_id": account.username}
+                    self.storage.UpdateOne(_filter, {"$set": account.dict()})
+                return True
 
-        query = f"(from:{username}) until:{start_time} since:{end_time}"
-        new_twitts = []
-        butch_count = 500
-        for twitt in sntwitter.TwitterSearchScraper(query).get_items():
-            if twitt.id not in twitts_id_set:
-                new_twitts.append(InsertOne(twitt.json()))
-                twitts_id_set.add(twitt.id)
-            if len(new_twitts) == butch_count:
-                collection = f"{account.twitter_id}"
-                self.storage_data[collection].bulk_write(new_twitts)
-                new_twitts.clear()
+            query = f"(from:{username}) until:{start_time} since:{end_time}"
+            new_twitts = []
+            butch_count = 500
+            for twitt in sntwitter.TwitterSearchScraper(query).get_items():
+                if twitt.id not in twitts_id_set:
+                    new_twitts.append(InsertOne(twitt.json()))
+                    twitts_id_set.add(twitt.id)
+                if len(new_twitts) == butch_count:
+                    collection = f"{account.twitter_id}"
+                    self.storage_data[collection].bulk_write(new_twitts)
+                    new_twitts.clear()
+        except BaseException:
+            raise TaskFaled
