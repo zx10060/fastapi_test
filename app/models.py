@@ -73,7 +73,8 @@ class Account(BaseModel):
     following_count: int = Field(...)
     followers_count: int = Field(...)
     description: str = Field(...)
-    status: str = Field(...)
+    twitts_count: int = Field(...)
+    status: str = Field(..., default="started")
 
     class Collection:
         """
@@ -121,3 +122,9 @@ class ProfilesList(BaseModel):
     """
 
     profiles: List[str]
+
+
+class TaskFaled(BaseException):
+    """
+    Class for task fails
+    """
