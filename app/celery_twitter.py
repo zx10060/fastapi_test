@@ -4,22 +4,15 @@ Celery tasks for pull data from twitter
 import logging
 from typing import Union
 
-from celery import Celery
 # from celery.schedules import crontab
 
 from app.puller import TwitterPuller
-from app.config import get_settings
+from app.connections import get_celery
+from app.models import TaskFaled
 
 log = logging.getLogger(__name__)
 
-_config = get_settings()
-_celery_broker_url = (
-    f"redis://{_config.CELERY_BROKER_HOST}:{_config.CELERY_BROKER_PORT}"
-)
-
-celery = Celery(__name__)
-celery.conf.broker_url = _celery_broker_url
-celery.conf.result_backend = _celery_broker_url
+celery = get_celery()
 
 
 @celery.task(name="create_task")
@@ -33,8 +26,13 @@ def create_task(self, users_list: Union[set, list]):
     try:
         puller = TwitterPuller()
         puller.get_users_data(users_list)
+    except TaskFaled:
+        log.error("Task was panding.. for users: %s", users_list)
     except BaseException:
-        log.error("Error in task `create task` with params: %s", users_list)
+        log.error(
+            "Error in task `create task` with params: %s",
+            users_list,
+        )
 
 
 @celery.task(name="start_pull_from_twitter")
@@ -47,6 +45,8 @@ def start_pull_from_twitter(self, user_id):
     try:
         puller = TwitterPuller()
         puller.pull_data(user_id)
+    except TaskFaled:
+        log.error("Task was panding.. for user: %s", user_id)
     except BaseException:
         log.error(
             "Error in task `start_pull_from_twitter` with params: %s",
@@ -63,6 +63,8 @@ def add_scrapper_task(username):
     try:
         puller = TwitterPuller()
         puller.scrap_user_data(username)
+    except TaskFaled:
+        log.error("Task was panding.. for user: %s", username)
     except BaseException:
         log.error(
             "Error in task `add_scrapper_task` with params: %s",
@@ -80,7 +82,10 @@ def update_user_data(self):
     try:
         pass
     except BaseException:
-        log.error("Error in task `add_scrapper_task` with params: %s", "")
+        log.error(
+            "Error in task `add_scrapper_task` with params: %s",
+            "",
+        )
     update_user_data.retry()
 
 
